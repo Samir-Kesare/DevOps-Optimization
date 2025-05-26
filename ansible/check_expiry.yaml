@@ -25,4 +25,18 @@
         msg: >-
           {{ inventory_hostname }}: password for {{ user_to_check }} expires in {{ days_to_expiry }} days 🚨 Warning: Expiry within {{ warning_days }} days!
       when: days_to_expiry is defined and (days_to_expiry | int) <= (warning_days | int)
+      register: warning_msg
 
+    - name: Append warning to summary file
+      lineinfile:
+        path: /var/lib/jenkins/ansible/warning_summary.txt
+        line: |
+          ok: [{{ inventory_hostname }}] => {
+              "msg": "{{ warning_msg.msg }}"
+          }
+        create: yes
+        mode: '0644'
+        state: present
+        insertafter: EOF
+      when: warning_msg is defined and warning_msg.msg is defined
+      delegate_to: localhost
