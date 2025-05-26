@@ -1,0 +1,67 @@
+pipeline {
+  agent any
+
+  environment {
+    BASE_DIR = '/var/lib/jenkins/ansible'
+    INVENTORY_FILE = "${BASE_DIR}/inventory.ini"
+    PRIVATE_KEY = "${BASE_DIR}/mykey.pem"
+    PLAYBOOK = "${BASE_DIR}/check_expiry.yaml"
+    WARNING_FILE = "${BASE_DIR}/warning_summary.txt"
+    RECIPIENTS = 'samirkesare1986@gmail.com'
+  }
+
+  stages {
+    stage('Prepare') {
+      steps {
+        echo 'Cleaning up previous warning file...'
+        sh "rm -f ${WARNING_FILE} || true"
+      }
+    }
+
+    stage('Run Ansible Playbook') {
+      steps {
+        echo 'Running Ansible playbook...'
+        sh """
+          ansible-playbook -i ${INVENTORY_FILE} ${PLAYBOOK} \\
+            -u ec2-user --private-key ${PRIVATE_KEY}
+        """
+      }
+    }
+
+    stage('Send Email if Warnings Exist') {
+      steps {
+        script {
+          if (fileExists(WARNING_FILE)) {
+            def warningContent = readFile(WARNING_FILE).trim()
+            if (warningContent) {
+              echo 'Warnings found, sending email...'
+              emailext(
+                subject: '🔔 Password Expiry Warning Report',
+                body: """\
+The following password expiry warnings were detected:
+
+${warningContent}
+""",
+                to: "${RECIPIENTS}"
+              )
+            } else {
+              echo 'No password expiry warnings.'
+            }
+          } else {
+            echo 'No password expiry warning file found.'
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    failure {
+      emailext(
+        subject: "❌ Jenkins Job Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+        body: "Build failed. Check the console output at ${env.BUILD_URL}console",
+        to: "${RECIPIENTS}"
+      )
+    }
+  }
+}
