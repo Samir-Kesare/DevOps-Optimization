@@ -1,0 +1,5 @@
+- name: Login to Docker registry
+  docker_login:
+    registry_url: "{{ insecure_registry }}"
+    username: "{{ docker_registry_user }}"
+    password: "{{ docker_registry_password }}"

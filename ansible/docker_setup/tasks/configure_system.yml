@@ -1,0 +1,21 @@
+- name: Update GRUB for Cgroup V1
+  command: >
+    grubby --update-kernel=/boot/vmlinuz-{{ ansible_kernel }}
+    --args="systemd.unified_cgroup_hierarchy=0 systemd.legacy_systemd_cgroup_controller"
+  when: ansible_distribution_major_version == "9"
+
+- name: Update sysctl.conf
+  blockinfile:
+    path: /etc/sysctl.conf
+    block: |
+      net.ipv4.ip_forward=1
+      fs.inotify.max_user_instances=8192
+      fs.inotify.max_user_watches=524288
+
+- name: Apply sysctl settings
+  command: sysctl -p
+
+- name: Stop Docker before reboot
+  systemd:
+    name: docker
+    state: stopped

@@ -1,0 +1,15 @@
+docker_version: "27.4.0"
+docker_packages:
+  - docker-ce-27.4.0-1.el9
+  - docker-ce-cli-27.4.0-1.el9
+  - docker-ce-rootless-extras-27.4.0-1.el9
+  - containerd.io
+
+insecure_registry: "172.31.87.32:8083"
+docker_data_root: "/app/docker"
+proxy_script: "proxy.sh"
+
+docker_registry_user: "admin"
+docker_registry_password: "admin123"
+
+docker_opts: "--insecure-registry={{ insecure_registry }} --data-root={{ docker_data_root }} --log-opt max-size=50m --log-opt max-file=5 --iptables=false"

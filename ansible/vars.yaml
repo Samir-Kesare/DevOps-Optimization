@@ -1,0 +1,3 @@
+user_to_check: ec2-user
+warning_days: 10
+

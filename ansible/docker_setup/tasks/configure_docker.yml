@@ -1,0 +1,29 @@
+- name: Install Docker packages
+  dnf:
+    name: "{{ docker_packages }}"
+    state: present
+
+- name: Override docker.service
+  template:
+    src: docker.service.j2
+    dest: /usr/lib/systemd/system/docker.service
+    mode: '0644'
+
+- name: Create drop-in config directory
+  file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: '0755'
+
+- name: Add docker-options.conf
+  template:
+    src: docker-options.conf.j2
+    dest: /etc/systemd/system/docker.service.d/docker-options.conf
+    mode: '0644'
+
+- name: Reload systemd and start Docker
+  systemd:
+    name: docker
+    enabled: yes
+    daemon_reload: yes
+    state: started

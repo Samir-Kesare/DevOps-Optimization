@@ -1,0 +1,62 @@
+- name: Monitor and manage memory usage
+  hosts: all
+  gather_facts: yes
+  become: yes
+  vars:
+    mem_threshold_percent: 10
+    alert_file: /tmp/low_memory_alerts.txt
+
+  tasks:
+
+    - name: Evaluate and act if free memory is below threshold
+      block:
+
+        - name: Get current free memory percentage
+          set_fact:
+            mem_free_percent: >-
+              {{
+                ((ansible_memavailable_mb if ansible_memavailable_mb is defined else ansible_memfree_mb)
+                / ansible_memtotal_mb * 100) | float | round(2)
+              }}
+
+        - name: Log current free memory
+          debug:
+            msg: "{{ inventory_hostname }} free memory = {{ mem_free_percent }}%"
+
+        - name: Clear system cache if memory is low
+          shell: sync; echo 3 > /proc/sys/vm/drop_caches
+
+        - name: Recalculate memory after cache clear
+          setup:
+            gather_subset:
+              - hardware
+          register: refreshed_facts
+
+        - name: Check free memory percent after clearing cache
+          set_fact:
+            mem_free_percent_after: >-
+              {{
+                (
+                  (refreshed_facts.ansible_facts.ansible_memavailable_mb
+                   if refreshed_facts.ansible_facts.ansible_memavailable_mb is defined
+                   else refreshed_facts.ansible_facts.ansible_memfree_mb)
+                  / refreshed_facts.ansible_facts.ansible_memtotal_mb * 100
+                ) | float | round(2)
+              }}
+
+        - name: Log memory percent after clearing cache
+          debug:
+            msg: "{{ inventory_hostname }} free memory after cache clear = {{ mem_free_percent_after }}%"
+
+        - name: Add alert if memory still low after clearing
+          lineinfile:
+            path: "{{ alert_file }}"
+            line: "⚠️ {{ inventory_hostname }}: Free memory still low after cache clear = {{ mem_free_percent_after }}%"
+            create: yes
+          delegate_to: localhost
+          when: mem_free_percent_after < mem_threshold_percent
+
+      when: >-
+        ((ansible_memavailable_mb if ansible_memavailable_mb is defined else ansible_memfree_mb)
+        / ansible_memtotal_mb * 100) < mem_threshold_percent
+

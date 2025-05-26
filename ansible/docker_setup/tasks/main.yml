@@ -1,0 +1,20 @@
+- name: Install prerequisites
+  import_tasks: install_prereqs.yml
+
+    #- name: Transfer files
+    # import_tasks: transfer_files.yml
+
+- name: Install and configure Docker
+  import_tasks: configure_docker.yml
+
+- name: Configure system settings
+  import_tasks: configure_system.yml
+
+- name: Reboot system
+  reboot:
+
+- name: Post reboot tasks
+  import_tasks: post_reboot.yml
+
+- name: Docker registry login
+  import_tasks: docker_login.yml

@@ -1,0 +1,7 @@
+---
+- name: Install Docker via role
+  hosts: webservers
+  become: true
+  roles:
+    - role: docker_setup
+

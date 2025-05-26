@@ -1,0 +1,15 @@
+- name: Copy libcgroup RPM
+  copy:
+    src: libcgroup-0.41-19.el8.x86_64.rpm
+    dest: /tmp/libcgroup.rpm
+
+- name: Install libcgroup RPM
+  yum:
+    name: /tmp/libcgroup.rpm
+    state: present
+
+- name: Update proxy.sh script
+  copy:
+    src: proxy.sh
+    dest: /etc/profile.d/proxy.sh
+    mode: '0755'

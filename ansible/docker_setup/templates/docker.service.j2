@@ -1,0 +1,25 @@
+[Unit]
+Description=Docker Application Container Engine
+After=network-online.target firewalld.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=
+ExecStart=/usr/bin/dockerd \
+$DOCKER_OPTS \
+$DOCKER_STORAGE_OPTIONS \
+$DOCKER_NETWORK_OPTIONS \
+$DOCKER_DNS_OPTIONS \
+$INSECURE_REGISTRY
+ExecReload=/bin/kill -s HUP $MAINPID
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+TimeoutStartSec=0
+Delegate=yes
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

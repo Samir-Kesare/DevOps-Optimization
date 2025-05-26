@@ -1,0 +1,28 @@
+- name: Load overlay module
+  modprobe:
+    name: overlay
+    state: present
+
+- name: Load br_netfilter module
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Restart Docker after reboot
+  systemd:
+    name: docker
+    state: restarted
+
+- name: Set SELinux to permissive
+  command: setenforce 0
+  ignore_errors: true
+
+- name: Install IPVS-related tools
+  yum:
+    name:
+      - ipvsadm
+      - ipset
+    state: present
+
+- name: Disable swap
+  command: swapoff -a
