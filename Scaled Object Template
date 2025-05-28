@@ -1,1 +1,41 @@
-apiVersion: 
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: ${SCALED_OBJECT_NAME}
+  namespace: ${NAMESPACE}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ${SERVICE_NAME}
+  pollingInterval: 5
+  cooldownPeriod: 300
+  minReplicaCount: ${MIN_REPLICAS}
+  maxReplicaCount: ${MAX_REPLICAS}
+  fallback:
+    failureThreshold: 3
+    replicas: ${MIN_REPLICAS}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 120
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 120
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://rancher-monitoring-kube-pr-prometheus.cattle-monitoring-system:9090
+        metricName: container_network_receive_bytes_total
+        query: sum(irate(container_network_receive_bytes_total{cluster="",namespace="${NAMESPACE}"}[5m]) * on (namespace,pod) group_left(workload,workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster="",namespace="${NAMESPACE}", workload=~"${SERVICE_NAME}", workload_type="deployment"})
+        threshold: '${THRESHOLD}'
+        ignoreNullValues: "true"
+
