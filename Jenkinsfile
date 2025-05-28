@@ -26,7 +26,6 @@ pipeline {
         stage('Substitute Variables in Template') {
             steps {
                 script {
-                    // Export values for envsubst
                     sh """
                         export SCALED_OBJECT_NAME=${params.SCALED_OBJECT_NAME}
                         export SERVICE_NAME=${params.SERVICE_NAME}
@@ -40,17 +39,22 @@ pipeline {
             }
         }
 
-        stage('Push to KEDA Repo') {
+        stage('Clone KEDA Repo and Push Changes') {
             steps {
-                dir('keda-updated') {
-                    script {
+                script {
+                    // Clone the repo directly in a separate dir
+                    sh "rm -rf keda-repo"
+                    dir('keda-repo') {
                         git url: "${env.GIT_KEDA_REPO}", branch: 'main', credentialsId: 'git-creds'
+
+                        // Ensure the target directory exists
                         sh """
-                            cp ../scaledobject.yaml ./scaled-objects/${params.SCALED_OBJECT_NAME}.yaml
+                            mkdir -p scaled-objects
+                            cp ../scaledobject.yaml scaled-objects/${params.SCALED_OBJECT_NAME}.yaml
                             git config user.name "jenkins"
                             git config user.email "jenkins@yourcompany.com"
                             git add .
-                            git commit -m "Update ScaledObject for ${params.SERVICE_NAME} (${params.OPCO_NAME})"
+                            git commit -m "Update ScaledObject for ${params.SERVICE_NAME} (${params.OPCO_NAME})" || echo "No changes to commit"
                             git push origin main
                         """
                     }
