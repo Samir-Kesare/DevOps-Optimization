@@ -1,61 +1,81 @@
 pipeline {
     agent any
 
-    parameters {
-        string(name: 'SCALED_OBJECT_NAME', defaultValue: 'cache-mgmt-service-keda-scaledobject', description: 'ScaledObject name')
-        string(name: 'SERVICE_NAME', defaultValue: 'cache-mgmt-service', description: 'Target Deployment name')
-        string(name: 'MIN_REPLICAS', defaultValue: '1', description: 'Minimum replica count')
-        string(name: 'MAX_REPLICAS', defaultValue: '1', description: 'Maximum replica count')
-        string(name: 'THRESHOLD', defaultValue: '238', description: 'Threshold for Prometheus metric')
-        string(name: 'NAMESPACE', defaultValue: 'default', description: 'Kubernetes namespace')
-        string(name: 'OPCO_NAME', defaultValue: 'default-opco', description: 'OPCO Name (for tagging/logging purposes)')
+    environment {
+        GIT_TEMPLATE_REPO = 'https://github.com/Samir-Kesare/keda-autoscaler-poc.git'
+        GIT_KEDA_REPO     = 'https://github.com/Samir-Kesare/KEDA.git'
+        BRANCH_NAME       = 'main'
     }
 
-    environment {
-        GIT_APP_REPO = 'https://github.com/Samir-Kesare/DevOps-Optimization.git'
-        GIT_KEDA_REPO = 'https://github.com/Samir-Kesare/KEDA.git'
+    parameters {
+        string(name: 'SCALED_OBJECT_NAME', defaultValue: 'cache-mgmt-service-keda-scaledobject', description: 'Name of the ScaledObject YAML file')
+        string(name: 'SERVICE_NAME', defaultValue: 'cache-mgmt-service', description: 'Name of the Kubernetes service to scale')
+        string(name: 'MIN_REPLICAS', defaultValue: '1', description: 'Minimum number of replicas')
+        string(name: 'MAX_REPLICAS', defaultValue: '10', description: 'Maximum number of replicas')
+        string(name: 'THRESHOLD', defaultValue: '50', description: 'Trigger threshold')
+        string(name: 'NAMESPACE', defaultValue: 'default', description: 'Namespace in which to deploy')
+        string(name: 'OPCO_NAME', defaultValue: 'default-opco', description: 'OPCO name used for metadata/labeling')
     }
 
     stages {
-        stage('Clone Template Repo') {
+        stage('Clone ScaledObject Template Repo') {
             steps {
-                git url: "${env.GIT_APP_REPO}", branch: 'main', credentialsId: 'git-creds'
-            }
-        }
-
-        stage('Substitute Variables in Template') {
-            steps {
-                script {
-                    sh """
-                        export SCALED_OBJECT_NAME=${params.SCALED_OBJECT_NAME}
-                        export SERVICE_NAME=${params.SERVICE_NAME}
-                        export MIN_REPLICAS=${params.MIN_REPLICAS}
-                        export MAX_REPLICAS=${params.MAX_REPLICAS}
-                        export THRESHOLD=${params.THRESHOLD}
-                        export NAMESPACE=${params.NAMESPACE}
-                        envsubst < scaledobject-template.yaml > scaledobject.yaml
-                    """
+                dir('template-repo') {
+                    git url: "${env.GIT_TEMPLATE_REPO}", branch: "${env.BRANCH_NAME}"
                 }
             }
         }
 
-        stage('Clone KEDA Repo and Push Changes') {
+        stage('Generate ScaledObject YAML') {
             steps {
                 script {
-                    // Clone the repo directly in a separate dir
-                    sh "rm -rf keda-repo"
-                    dir('keda-repo') {
-                        git url: "${env.GIT_KEDA_REPO}", branch: 'main', credentialsId: 'git-creds'
+                    def templateFile = readFile 'template-repo/scaled-object-template.yaml'
+                    def renderedYaml = templateFile
+                        .replaceAll("\\{\\{SCALED_OBJECT_NAME\\}\\}", params.SCALED_OBJECT_NAME)
+                        .replaceAll("\\{\\{SERVICE_NAME\\}\\}", params.SERVICE_NAME)
+                        .replaceAll("\\{\\{MIN_REPLICAS\\}\\}", params.MIN_REPLICAS)
+                        .replaceAll("\\{\\{MAX_REPLICAS\\}\\}", params.MAX_REPLICAS)
+                        .replaceAll("\\{\\{THRESHOLD\\}\\}", params.THRESHOLD)
+                        .replaceAll("\\{\\{NAMESPACE\\}\\}", params.NAMESPACE)
+                        .replaceAll("\\{\\{OPCO_NAME\\}\\}", params.OPCO_NAME)
 
-                        // Ensure the target directory exists
+                    writeFile file: 'scaledobject.yaml', text: renderedYaml
+                }
+            }
+        }
+
+        stage('Clone KEDA Repo') {
+            steps {
+                dir('keda-repo') {
+                    git url: "${env.GIT_KEDA_REPO}", branch: "${env.BRANCH_NAME}", credentialsId: 'git-creds'
+                }
+            }
+        }
+
+        stage('Copy and Commit ScaledObject') {
+            steps {
+                dir('keda-repo') {
+                    script {
                         sh """
                             mkdir -p scaled-objects
-                            cp ../scaledobject.yaml scaled-objects/${params.SCALED_OBJECT_NAME}.yaml
+                            cp ../scaledobject.yaml ./scaled-objects/${params.SCALED_OBJECT_NAME}.yaml
                             git config user.name "jenkins"
                             git config user.email "jenkins@yourcompany.com"
                             git add .
-                            git commit -m "Update ScaledObject for ${params.SERVICE_NAME} (${params.OPCO_NAME})" || echo "No changes to commit"
-                            git push origin main
+                            git commit -m "Update ScaledObject for ${params.SERVICE_NAME} (${params.OPCO_NAME})" || echo "Nothing to commit"
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Push to KEDA Repo') {
+            steps {
+                dir('keda-repo') {
+                    withCredentials([usernamePassword(credentialsId: 'git-creds', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                        sh """
+                            git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/Samir-Kesare/KEDA.git
+                            git push origin ${env.BRANCH_NAME}
                         """
                     }
                 }
@@ -65,10 +85,11 @@ pipeline {
 
     post {
         success {
-            echo "✅ ScaledObject deployed and pushed successfully."
+            echo '✅ ScaledObject YAML created and pushed successfully.'
         }
         failure {
-            echo "❌ Pipeline failed."
+            echo '❌ Pipeline failed.'
         }
     }
 }
+
