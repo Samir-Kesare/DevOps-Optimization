@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        GIT_TEMPLATE_REPO = 'https://github.com/Samir-Kesare/keda-autoscaler-poc.git'
+        GIT_TEMPLATE_REPO = 'https://github.com/Samir-Kesare/DevOps-Optimization.git'
         GIT_KEDA_REPO     = 'https://github.com/Samir-Kesare/KEDA.git'
         BRANCH_NAME       = 'main'
     }
