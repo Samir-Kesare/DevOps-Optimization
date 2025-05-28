@@ -12,8 +12,8 @@ pipeline {
     }
 
     environment {
-        GIT_APP_REPO = 'https://github.com/Samir-Kesare/KEDA.git'
-        GIT_KEDA_REPO = 'https://github.com/Samir-Kesare/DevOps-Optimization.git'
+        GIT_APP_REPO = 'https://github.com/Samir-Kesare/DevOps-Optimization.git'
+        GIT_KEDA_REPO = 'https://github.com/Samir-Kesare/KEDA.git'
     }
 
     stages {
