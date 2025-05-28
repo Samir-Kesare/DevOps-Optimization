@@ -40,12 +40,6 @@ pipeline {
             }
         }
 
-        stage('Apply to Kubernetes') {
-            steps {
-                sh "kubectl apply -f scaledobject.yaml -n ${params.NAMESPACE}"
-            }
-        }
-
         stage('Push to KEDA Repo') {
             steps {
                 dir('keda-updated') {
