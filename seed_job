@@ -1,0 +1,53 @@
+def jobName = "${JOB_NAME_PARAM}"
+def selectedEnv = "${ENVIRONMENT}"
+def selectedBranch = "${BRANCH_NAME}"
+def gitRepo = "${REPO_URL}"
+def nodeLabel = "${AGENT_LABEL}"
+
+job(jobName) {
+    label(nodeLabel)  // Run on dynamic agent
+
+    parameters {
+        stringParam('JOB_NAME_PARAM', 'dynamic-docker-job', 'Name of the job')
+        choiceParam('ENVIRONMENT', ['Development', 'Staging', 'Production'], 'Select environment')
+        stringParam('BRANCH_NAME', 'master', 'Branch to build')
+        stringParam('REPO_URL', 'https://github.com/Samir-Kesare/addressbook.git', 'Git repository URL')
+        stringParam('AGENT_LABEL', 'linux-agent', 'Label of the Jenkins agent/slave to run this job')
+    }
+
+    scm {
+        git {
+            remote {
+                url(gitRepo)
+            }
+            branch(selectedBranch)
+        }
+    }
+
+    steps {
+        shell("echo 'Job name is ${jobName}'")
+        shell("echo 'Running in ${selectedEnv} environment on agent ${nodeLabel}'")
+
+        // Install Docker and add user to docker group
+        shell('''
+            echo "[INFO] Installing Docker on agent..."
+            sudo apt-get update
+            sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+            echo \
+              "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+              $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+            echo "[INFO] Adding Jenkins user to docker group..."
+            sudo usermod -aG docker $(whoami)
+
+            echo "[INFO] Docker installation complete. Docker version:"
+            docker --version || echo "[WARNING] Docker not accessible in current shell. You may need to restart agent or relaunch shell."
+        ''')
+    }
+}
