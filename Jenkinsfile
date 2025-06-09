@@ -2,14 +2,13 @@ pipeline {
     agent any
 
     parameters {
-        text(name: 'PAYLOAD', defaultValue: '''{
-    "SERVICE_NAME": "cache-mgmt-service",
-    "MIN_REPLICAS": "1",
-    "MAX_REPLICAS": "2",
-    "THRESHOLD": "238",
-    "NAMESPACE": "default",
-    "OPCO_NAME": "default-opco"
-}''', description: 'Jira JSON Payload')
+        string(name: 'SERVICE_NAME', defaultValue: '', description: 'Service Name from Jira')
+        string(name: 'MIN_REPLICAS', defaultValue: '', description: 'Minimum replicas')
+        string(name: 'MAX_REPLICAS', defaultValue: '', description: 'Maximum replicas')
+        string(name: 'THRESHOLD', defaultValue: '', description: 'Threshold value')
+        string(name: 'NAMESPACE', defaultValue: 'default', description: 'Namespace')
+        string(name: 'OPCO_NAME', defaultValue: '', description: 'OpCo Name')
+        string(name: 'SCALED_OBJECT_NAME', defaultValue: '', description: 'Scaled Object Name (optional)')
     }
 
     environment {
@@ -18,36 +17,25 @@ pipeline {
     }
 
     stages {
-
-        stage('Parse JSON Payload') {
+        stage('Validate Params') {
             steps {
                 script {
-                    echo "🔍 Raw PAYLOAD: ${params.PAYLOAD}"
-                    def data = readJSON text: params.PAYLOAD
+                    // If SCALED_OBJECT_NAME is empty, create default value from SERVICE_NAME
+                    if (!params.SCALED_OBJECT_NAME?.trim()) {
+                        env.SCALED_OBJECT_NAME = "${params.SERVICE_NAME}-keda-scaledobject"
+                    } else {
+                        env.SCALED_OBJECT_NAME = params.SCALED_OBJECT_NAME
+                    }
 
-                    env.SERVICE_NAME        = data.SERVICE_NAME
-                    env.SCALED_OBJECT_NAME  = "${data.SERVICE_NAME}-keda-scaledobject"
-                    env.MIN_REPLICAS        = data.MIN_REPLICAS
-                    env.MAX_REPLICAS        = data.MAX_REPLICAS
-                    env.THRESHOLD           = data.THRESHOLD
-                    env.NAMESPACE           = data.NAMESPACE
-                    env.OPCO_NAME           = data.OPCO_NAME
-
-                    echo "✅ Parsed Values:"
-                    echo "SERVICE_NAME: ${env.SERVICE_NAME}"
+                    echo "Received params:"
+                    echo "SERVICE_NAME: ${params.SERVICE_NAME}"
+                    echo "MIN_REPLICAS: ${params.MIN_REPLICAS}"
+                    echo "MAX_REPLICAS: ${params.MAX_REPLICAS}"
+                    echo "THRESHOLD: ${params.THRESHOLD}"
+                    echo "NAMESPACE: ${params.NAMESPACE}"
+                    echo "OPCO_NAME: ${params.OPCO_NAME}"
                     echo "SCALED_OBJECT_NAME: ${env.SCALED_OBJECT_NAME}"
-                    echo "MIN_REPLICAS: ${env.MIN_REPLICAS}"
-                    echo "MAX_REPLICAS: ${env.MAX_REPLICAS}"
-                    echo "THRESHOLD: ${env.THRESHOLD}"
-                    echo "NAMESPACE: ${env.NAMESPACE}"
-                    echo "OPCO_NAME: ${env.OPCO_NAME}"
                 }
-            }
-        }
-
-        stage('Clone Template Repo') {
-            steps {
-                git url: "${env.GIT_APP_REPO}", branch: 'main', credentialsId: 'git-creds'
             }
         }
 
@@ -55,12 +43,12 @@ pipeline {
             steps {
                 script {
                     sh """
-                        export SCALED_OBJECT_NAME="${env.SCALED_OBJECT_NAME}"
-                        export SERVICE_NAME="${env.SERVICE_NAME}"
-                        export MIN_REPLICAS="${env.MIN_REPLICAS}"
-                        export MAX_REPLICAS="${env.MAX_REPLICAS}"
-                        export THRESHOLD="${env.THRESHOLD}"
-                        export NAMESPACE="${env.NAMESPACE}"
+                        export SERVICE_NAME=${params.SERVICE_NAME}
+                        export MIN_REPLICAS=${params.MIN_REPLICAS}
+                        export MAX_REPLICAS=${params.MAX_REPLICAS}
+                        export THRESHOLD=${params.THRESHOLD}
+                        export NAMESPACE=${params.NAMESPACE}
+                        export SCALED_OBJECT_NAME=${env.SCALED_OBJECT_NAME}
                         envsubst < scaledobject-template.yaml > scaledobject.yaml
                     """
                 }
@@ -73,14 +61,13 @@ pipeline {
                     sh "rm -rf keda-repo"
                     dir('keda-repo') {
                         git url: "${env.GIT_KEDA_REPO}", branch: 'main', credentialsId: 'git-creds'
-
                         sh """
                             mkdir -p scaled-objects
                             cp ../scaledobject.yaml scaled-objects/${env.SCALED_OBJECT_NAME}.yaml
                             git config user.name "jenkins"
                             git config user.email "jenkins@yourcompany.com"
                             git add .
-                            git commit -m "Update ScaledObject for ${env.SERVICE_NAME} (${env.OPCO_NAME})" || echo "No changes to commit"
+                            git commit -m "Update ScaledObject for ${params.SERVICE_NAME} (${params.OPCO_NAME})" || echo "No changes to commit"
                         """
 
                         withCredentials([usernamePassword(credentialsId: 'git-creds', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
@@ -103,5 +90,4 @@ pipeline {
         }
     }
 }
-
 
