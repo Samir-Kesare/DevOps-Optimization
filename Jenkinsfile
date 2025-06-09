@@ -2,7 +2,14 @@ pipeline {
     agent any
 
     parameters {
-        text(name: 'PAYLOAD', defaultValue: '{}', description: 'JSON payload from JIRA')
+        text(name: 'PAYLOAD', defaultValue: '''{
+    "SERVICE_NAME": "cache-mgmt-service",
+    "MIN_REPLICAS": "1",
+    "MAX_REPLICAS": "2",
+    "THRESHOLD": "238",
+    "NAMESPACE": "default",
+    "OPCO_NAME": "default-opco"
+}''', description: 'Jira JSON Payload')
     }
 
     environment {
@@ -11,27 +18,29 @@ pipeline {
     }
 
     stages {
-        stage('Parse Payload') {
+
+        stage('Parse JSON Payload') {
             steps {
                 script {
+                    echo "🔍 Raw PAYLOAD: ${params.PAYLOAD}"
                     def data = readJSON text: params.PAYLOAD
 
-                    env.SERVICE_NAME = data.SERVICE_NAME
-                    env.SCALED_OBJECT_NAME = "${data.SERVICE_NAME}-keda-scaledobject"
-                    env.MIN_REPLICAS = data.MIN_REPLICAS
-                    env.MAX_REPLICAS = data.MAX_REPLICAS
-                    env.THRESHOLD = data.THRESHOLD
-                    env.NAMESPACE = data.NAMESPACE
-                    env.OPCO_NAME = data.OPCO_NAME
+                    env.SERVICE_NAME        = data.SERVICE_NAME
+                    env.SCALED_OBJECT_NAME  = "${data.SERVICE_NAME}-keda-scaledobject"
+                    env.MIN_REPLICAS        = data.MIN_REPLICAS
+                    env.MAX_REPLICAS        = data.MAX_REPLICAS
+                    env.THRESHOLD           = data.THRESHOLD
+                    env.NAMESPACE           = data.NAMESPACE
+                    env.OPCO_NAME           = data.OPCO_NAME
 
-                    echo "📦 Parsed JSON:"
-                    echo "  SERVICE_NAME         = ${env.SERVICE_NAME}"
-                    echo "  SCALED_OBJECT_NAME   = ${env.SCALED_OBJECT_NAME}"
-                    echo "  MIN_REPLICAS         = ${env.MIN_REPLICAS}"
-                    echo "  MAX_REPLICAS         = ${env.MAX_REPLICAS}"
-                    echo "  THRESHOLD            = ${env.THRESHOLD}"
-                    echo "  NAMESPACE            = ${env.NAMESPACE}"
-                    echo "  OPCO_NAME            = ${env.OPCO_NAME}"
+                    echo "✅ Parsed Values:"
+                    echo "SERVICE_NAME: ${env.SERVICE_NAME}"
+                    echo "SCALED_OBJECT_NAME: ${env.SCALED_OBJECT_NAME}"
+                    echo "MIN_REPLICAS: ${env.MIN_REPLICAS}"
+                    echo "MAX_REPLICAS: ${env.MAX_REPLICAS}"
+                    echo "THRESHOLD: ${env.THRESHOLD}"
+                    echo "NAMESPACE: ${env.NAMESPACE}"
+                    echo "OPCO_NAME: ${env.OPCO_NAME}"
                 }
             }
         }
@@ -46,12 +55,12 @@ pipeline {
             steps {
                 script {
                     sh """
-                        export SCALED_OBJECT_NAME=${env.SCALED_OBJECT_NAME}
-                        export SERVICE_NAME=${env.SERVICE_NAME}
-                        export MIN_REPLICAS=${env.MIN_REPLICAS}
-                        export MAX_REPLICAS=${env.MAX_REPLICAS}
-                        export THRESHOLD=${env.THRESHOLD}
-                        export NAMESPACE=${env.NAMESPACE}
+                        export SCALED_OBJECT_NAME="${env.SCALED_OBJECT_NAME}"
+                        export SERVICE_NAME="${env.SERVICE_NAME}"
+                        export MIN_REPLICAS="${env.MIN_REPLICAS}"
+                        export MAX_REPLICAS="${env.MAX_REPLICAS}"
+                        export THRESHOLD="${env.THRESHOLD}"
+                        export NAMESPACE="${env.NAMESPACE}"
                         envsubst < scaledobject-template.yaml > scaledobject.yaml
                     """
                 }
@@ -94,4 +103,5 @@ pipeline {
         }
     }
 }
+
 
