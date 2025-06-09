@@ -2,13 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'SCALED_OBJECT_NAME', defaultValue: 'cache-mgmt-service-keda-scaledobject', description: 'ScaledObject name')
-        string(name: 'SERVICE_NAME', defaultValue: 'cache-mgmt-service', description: 'Target Deployment name')
-        string(name: 'MIN_REPLICAS', defaultValue: '1', description: 'Minimum replica count')
-        string(name: 'MAX_REPLICAS', defaultValue: '1', description: 'Maximum replica count')
-        string(name: 'THRESHOLD', defaultValue: '238', description: 'Threshold for Prometheus metric')
-        string(name: 'NAMESPACE', defaultValue: 'default', description: 'Kubernetes namespace')
-        string(name: 'OPCO_NAME', defaultValue: 'default-opco', description: 'OPCO Name (for tagging/logging purposes)')
+        text(name: 'PAYLOAD', defaultValue: '{}', description: 'JSON payload from JIRA')
     }
 
     environment {
@@ -17,6 +11,31 @@ pipeline {
     }
 
     stages {
+        stage('Parse Payload') {
+            steps {
+                script {
+                    def data = readJSON text: params.PAYLOAD
+
+                    env.SERVICE_NAME = data.SERVICE_NAME
+                    env.SCALED_OBJECT_NAME = "${data.SERVICE_NAME}-keda-scaledobject"
+                    env.MIN_REPLICAS = data.MIN_REPLICAS
+                    env.MAX_REPLICAS = data.MAX_REPLICAS
+                    env.THRESHOLD = data.THRESHOLD
+                    env.NAMESPACE = data.NAMESPACE
+                    env.OPCO_NAME = data.OPCO_NAME
+
+                    echo "📦 Parsed JSON:"
+                    echo "  SERVICE_NAME         = ${env.SERVICE_NAME}"
+                    echo "  SCALED_OBJECT_NAME   = ${env.SCALED_OBJECT_NAME}"
+                    echo "  MIN_REPLICAS         = ${env.MIN_REPLICAS}"
+                    echo "  MAX_REPLICAS         = ${env.MAX_REPLICAS}"
+                    echo "  THRESHOLD            = ${env.THRESHOLD}"
+                    echo "  NAMESPACE            = ${env.NAMESPACE}"
+                    echo "  OPCO_NAME            = ${env.OPCO_NAME}"
+                }
+            }
+        }
+
         stage('Clone Template Repo') {
             steps {
                 git url: "${env.GIT_APP_REPO}", branch: 'main', credentialsId: 'git-creds'
@@ -27,12 +46,12 @@ pipeline {
             steps {
                 script {
                     sh """
-                        export SCALED_OBJECT_NAME=${params.SCALED_OBJECT_NAME}
-                        export SERVICE_NAME=${params.SERVICE_NAME}
-                        export MIN_REPLICAS=${params.MIN_REPLICAS}
-                        export MAX_REPLICAS=${params.MAX_REPLICAS}
-                        export THRESHOLD=${params.THRESHOLD}
-                        export NAMESPACE=${params.NAMESPACE}
+                        export SCALED_OBJECT_NAME=${env.SCALED_OBJECT_NAME}
+                        export SERVICE_NAME=${env.SERVICE_NAME}
+                        export MIN_REPLICAS=${env.MIN_REPLICAS}
+                        export MAX_REPLICAS=${env.MAX_REPLICAS}
+                        export THRESHOLD=${env.THRESHOLD}
+                        export NAMESPACE=${env.NAMESPACE}
                         envsubst < scaledobject-template.yaml > scaledobject.yaml
                     """
                 }
@@ -48,11 +67,11 @@ pipeline {
 
                         sh """
                             mkdir -p scaled-objects
-                            cp ../scaledobject.yaml scaled-objects/${params.SCALED_OBJECT_NAME}.yaml
+                            cp ../scaledobject.yaml scaled-objects/${env.SCALED_OBJECT_NAME}.yaml
                             git config user.name "jenkins"
                             git config user.email "jenkins@yourcompany.com"
                             git add .
-                            git commit -m "Update ScaledObject for ${params.SERVICE_NAME} (${params.OPCO_NAME})" || echo "No changes to commit"
+                            git commit -m "Update ScaledObject for ${env.SERVICE_NAME} (${env.OPCO_NAME})" || echo "No changes to commit"
                         """
 
                         withCredentials([usernamePassword(credentialsId: 'git-creds', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
@@ -75,3 +94,4 @@ pipeline {
         }
     }
 }
+
