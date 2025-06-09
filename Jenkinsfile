@@ -2,13 +2,13 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'SERVICE_NAME', defaultValue: '', description: 'Service Name from Jira')
-        string(name: 'MIN_REPLICAS', defaultValue: '', description: 'Minimum replicas')
-        string(name: 'MAX_REPLICAS', defaultValue: '', description: 'Maximum replicas')
-        string(name: 'THRESHOLD', defaultValue: '', description: 'Threshold value')
-        string(name: 'NAMESPACE', defaultValue: 'default', description: 'Namespace')
-        string(name: 'OPCO_NAME', defaultValue: '', description: 'OpCo Name')
-        string(name: 'SCALED_OBJECT_NAME', defaultValue: '', description: 'Scaled Object Name (optional)')
+        string(name: 'SCALED_OBJECT_NAME', defaultValue: 'cache-mgmt-service-keda-scaledobject', description: 'ScaledObject name')
+        string(name: 'SERVICE_NAME', defaultValue: 'cache-mgmt-service', description: 'Target Deployment name')
+        string(name: 'MIN_REPLICAS', defaultValue: '1', description: 'Minimum replica count')
+        string(name: 'MAX_REPLICAS', defaultValue: '1', description: 'Maximum replica count')
+        string(name: 'THRESHOLD', defaultValue: '238', description: 'Threshold for Prometheus metric')
+        string(name: 'NAMESPACE', defaultValue: 'default', description: 'Kubernetes namespace')
+        string(name: 'OPCO_NAME', defaultValue: 'default-opco', description: 'OPCO Name (for tagging/logging purposes)')
     }
 
     environment {
@@ -17,25 +17,9 @@ pipeline {
     }
 
     stages {
-        stage('Validate Params') {
+        stage('Clone Template Repo') {
             steps {
-                script {
-                    // If SCALED_OBJECT_NAME is empty, create default value from SERVICE_NAME
-                    if (!params.SCALED_OBJECT_NAME?.trim()) {
-                        env.SCALED_OBJECT_NAME = "${params.SERVICE_NAME}-keda-scaledobject"
-                    } else {
-                        env.SCALED_OBJECT_NAME = params.SCALED_OBJECT_NAME
-                    }
-
-                    echo "Received params:"
-                    echo "SERVICE_NAME: ${params.SERVICE_NAME}"
-                    echo "MIN_REPLICAS: ${params.MIN_REPLICAS}"
-                    echo "MAX_REPLICAS: ${params.MAX_REPLICAS}"
-                    echo "THRESHOLD: ${params.THRESHOLD}"
-                    echo "NAMESPACE: ${params.NAMESPACE}"
-                    echo "OPCO_NAME: ${params.OPCO_NAME}"
-                    echo "SCALED_OBJECT_NAME: ${env.SCALED_OBJECT_NAME}"
-                }
+                git url: "${env.GIT_APP_REPO}", branch: 'main', credentialsId: 'git-creds'
             }
         }
 
@@ -43,12 +27,12 @@ pipeline {
             steps {
                 script {
                     sh """
+                        export SCALED_OBJECT_NAME=${params.SCALED_OBJECT_NAME}
                         export SERVICE_NAME=${params.SERVICE_NAME}
                         export MIN_REPLICAS=${params.MIN_REPLICAS}
                         export MAX_REPLICAS=${params.MAX_REPLICAS}
                         export THRESHOLD=${params.THRESHOLD}
                         export NAMESPACE=${params.NAMESPACE}
-                        export SCALED_OBJECT_NAME=${env.SCALED_OBJECT_NAME}
                         envsubst < scaledobject-template.yaml > scaledobject.yaml
                     """
                 }
@@ -61,9 +45,10 @@ pipeline {
                     sh "rm -rf keda-repo"
                     dir('keda-repo') {
                         git url: "${env.GIT_KEDA_REPO}", branch: 'main', credentialsId: 'git-creds'
+
                         sh """
                             mkdir -p scaled-objects
-                            cp ../scaledobject.yaml scaled-objects/${env.SCALED_OBJECT_NAME}.yaml
+                            cp ../scaledobject.yaml scaled-objects/${params.SCALED_OBJECT_NAME}.yaml
                             git config user.name "jenkins"
                             git config user.email "jenkins@yourcompany.com"
                             git add .
@@ -90,4 +75,3 @@ pipeline {
         }
     }
 }
-
