@@ -17,6 +17,35 @@ pipeline {
     }
 
     stages {
+
+        stage('Validate Params') {
+            steps {
+                script {
+                    // Clean float-looking values to remove trailing .0
+                    String sanitize(String input) {
+                        return input.replaceAll(/\.0$/, '')
+                    }
+
+                    env.SERVICE_NAME        = params.SERVICE_NAME
+                    env.SCALED_OBJECT_NAME  = sanitize(params.SCALED_OBJECT_NAME)
+                    env.MIN_REPLICAS        = sanitize(params.MIN_REPLICAS)
+                    env.MAX_REPLICAS        = sanitize(params.MAX_REPLICAS)
+                    env.THRESHOLD           = sanitize(params.THRESHOLD)
+                    env.NAMESPACE           = params.NAMESPACE
+                    env.OPCO_NAME           = params.OPCO_NAME
+
+                    echo "🔍 Cleaned values:"
+                    echo "SERVICE_NAME: ${env.SERVICE_NAME}"
+                    echo "SCALED_OBJECT_NAME: ${env.SCALED_OBJECT_NAME}"
+                    echo "MIN_REPLICAS: ${env.MIN_REPLICAS}"
+                    echo "MAX_REPLICAS: ${env.MAX_REPLICAS}"
+                    echo "THRESHOLD: ${env.THRESHOLD}"
+                    echo "NAMESPACE: ${env.NAMESPACE}"
+                    echo "OPCO_NAME: ${env.OPCO_NAME}"
+                }
+            }
+        }
+
         stage('Clone Template Repo') {
             steps {
                 git url: "${env.GIT_APP_REPO}", branch: 'main', credentialsId: 'git-creds'
@@ -27,12 +56,12 @@ pipeline {
             steps {
                 script {
                     sh """
-                        export SCALED_OBJECT_NAME=${params.SCALED_OBJECT_NAME}
-                        export SERVICE_NAME=${params.SERVICE_NAME}
-                        export MIN_REPLICAS=${params.MIN_REPLICAS}
-                        export MAX_REPLICAS=${params.MAX_REPLICAS}
-                        export THRESHOLD=${params.THRESHOLD}
-                        export NAMESPACE=${params.NAMESPACE}
+                        export SCALED_OBJECT_NAME=${env.SCALED_OBJECT_NAME}
+                        export SERVICE_NAME=${env.SERVICE_NAME}
+                        export MIN_REPLICAS=${env.MIN_REPLICAS}
+                        export MAX_REPLICAS=${env.MAX_REPLICAS}
+                        export THRESHOLD=${env.THRESHOLD}
+                        export NAMESPACE=${env.NAMESPACE}
                         envsubst < scaledobject-template.yaml > scaledobject.yaml
                     """
                 }
@@ -48,11 +77,11 @@ pipeline {
 
                         sh """
                             mkdir -p scaled-objects
-                            cp ../scaledobject.yaml scaled-objects/${params.SCALED_OBJECT_NAME}.yaml
+                            cp ../scaledobject.yaml scaled-objects/${env.SCALED_OBJECT_NAME}.yaml
                             git config user.name "jenkins"
                             git config user.email "jenkins@yourcompany.com"
                             git add .
-                            git commit -m "Update ScaledObject for ${params.SERVICE_NAME} (${params.OPCO_NAME})" || echo "No changes to commit"
+                            git commit -m "Update ScaledObject for ${env.SERVICE_NAME} (${env.OPCO_NAME})" || echo "No changes to commit"
                         """
 
                         withCredentials([usernamePassword(credentialsId: 'git-creds', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
