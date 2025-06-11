@@ -17,20 +17,14 @@ pipeline {
     }
 
     stages {
-
         stage('Validate Params') {
             steps {
                 script {
-                    // Clean float-looking values to remove trailing .0
-                    String sanitize(String input) {
-                        return input.replaceAll(/\.0$/, '')
-                    }
-
                     env.SERVICE_NAME        = params.SERVICE_NAME
-                    env.SCALED_OBJECT_NAME  = sanitize(params.SCALED_OBJECT_NAME)
-                    env.MIN_REPLICAS        = sanitize(params.MIN_REPLICAS)
-                    env.MAX_REPLICAS        = sanitize(params.MAX_REPLICAS)
-                    env.THRESHOLD           = sanitize(params.THRESHOLD)
+                    env.SCALED_OBJECT_NAME  = params.SCALED_OBJECT_NAME.replaceAll(/\.0$/, '')
+                    env.MIN_REPLICAS        = params.MIN_REPLICAS.replaceAll(/\.0$/, '')
+                    env.MAX_REPLICAS        = params.MAX_REPLICAS.replaceAll(/\.0$/, '')
+                    env.THRESHOLD           = params.THRESHOLD.replaceAll(/\.0$/, '')
                     env.NAMESPACE           = params.NAMESPACE
                     env.OPCO_NAME           = params.OPCO_NAME
 
@@ -104,3 +98,4 @@ pipeline {
         }
     }
 }
+
