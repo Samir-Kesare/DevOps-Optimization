@@ -1,19 +1,45 @@
-[jenkins@k8s-master devopscore_ansible]$ ansible-playbook -i inventory.ini check_expiry.yaml
-/usr/lib/python2.7/site-packages/requests/__init__.py:91: RequestsDependencyWarning: urllib3 (1.24.1) or chardet (2.2.1) doesn't match a supported version!
-  RequestsDependencyWarning)
+---
+- name: Check password expiry for a specific user
+  hosts: webservers
+  gather_facts: yes
+  vars_files:
+    - vars.yaml
 
-PLAY [Check password expiry for a specific user] ************************************************************************************
+  tasks:
+    - name: Get password expiry date for user {{ user_to_check }}
+      shell: "chage -l {{ user_to_check }} | awk -F': ' '/Password expires/ {print $2}'"
+      register: expiry_output
+      changed_when: false
 
-TASK [Gathering Facts] **************************************************************************************************************
-ok: [172.27.67.32]
+    - name: Calculate days to expiry
+      set_fact:
+        days_to_expiry: >-
+          {{
+            (
+              (expiry_output.stdout | to_datetime('%b %d, %Y') | strftime('%s') | int) -
+              (ansible_date_time.epoch | int)
+            ) // 86400
+          }}
+      when: expiry_output.stdout is defined and expiry_output.stdout != 'never'
 
-TASK [Get password expiry date for user esbuser] ************************************************************************************
-ok: [172.27.67.32]
+    - name: Show warning for expiring passwords
+      debug:
+        msg: >-
+          {{ inventory_hostname }}: password for {{ user_to_check }} expires in {{ days_to_expiry }} days 🚨 Warning: Expiry within {{ warning_days }} days!
+      when: days_to_expiry is defined and (days_to_expiry | int) <= (warning_days | int)
+      register: warning_msg
 
-TASK [Calculate days to expiry] *****************************************************************************************************
-fatal: [172.27.67.32]: FAILED! => {"msg": "Unexpected templating type error occurred on ({{\n  (\n    (expiry_output.stdout | to_datetime('%b %d, %Y') | to_datetime('%s') | int) -\n    (ansible_date_time.epoch | int)\n  ) // 86400\n}}): must be string, not datetime.datetime"}
+    - name: Append warning to summary file
+      lineinfile:
+        path: /var/lib/jenkins/ansible/warning_summary.txt
+        line: |
+          ok: [{{ inventory_hostname }}] => {
+              "msg": "{{ warning_msg.msg }}"
+          }
+        create: yes
+        mode: '0644'
+        state: present
+        insertafter: EOF
+      when: warning_msg is defined and warning_msg.msg is defined
+      delegate_to: localhost
 
-PLAY RECAP **************************************************************************************************************************
-172.27.67.32               : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0
-
-[jenkins@k8s-master devopscore_ansible]$
