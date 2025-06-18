@@ -1,70 +1,21 @@
----
-- name: Check password expiry for a specific user
-  hosts: webservers
-  gather_facts: yes
-  vars_files:
-    - vars.yaml
+[jenkins@k8s-master devopscore_ansible]$ ansible-playbook -i inventory.ini check_expiry.yaml
+/usr/lib/python2.7/site-packages/requests/__init__.py:91: RequestsDependencyWarning: urllib3 (1.24.1) or chardet (2.2.1) doesn't match a supported version!
+  RequestsDependencyWarning)
 
-  tasks:
-    - name: Check if user {{ user_to_check }} exists
-      shell: id -u {{ user_to_check }}
-      register: user_check
-      failed_when: false
-      changed_when: false
+PLAY [Check password expiry for a specific user] ************************************************************************************
 
-    - name: Skip if user does not exist
-      debug:
-        msg: "User {{ user_to_check }} does not exist on {{ inventory_hostname }}"
-      when: user_check.rc != 0
+TASK [Gathering Facts] **************************************************************************************************************
+ok: [172.27.67.32]
 
-    - name: Get password expiry date for user {{ user_to_check }}
-      shell: "chage -l {{ user_to_check }} | awk -F': ' '/Password expires/ {print $2}'"
-      register: expiry_output
-      changed_when: false
-      when: user_check.rc == 0
+TASK [Get password expiry date for user esbuser] ************************************************************************************
+ok: [172.27.67.32]
 
-    - name: Skip if password never expires
-      debug:
-        msg: "User {{ user_to_check }} on {{ inventory_hostname }} has no expiry (never)"
-      when: expiry_output.stdout is defined and expiry_output.stdout == 'never'
+TASK [Calculate days to expiry] *****************************************************************************************************
+fatal: [172.27.67.32]: FAILED! => {"msg": "the field 'args' has an invalid value ({u'days_to_expiry': u\"{{\\n  (expiry_output.stdout | to_datetime('%b %d, %Y') - ansible_date_time.epoch | to_datetime('%s')) // 86400 | int\\n}}\"}), and could not be converted to an dict.The error was: 's' is a bad directive in format '%s'\n\nThe error appears to be in '/app/jenkins/devops/devopscore_ansible/check_expiry.yaml': line 14, column 7, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n\n    - name: Calculate days to expiry\n      ^ here\n"}
 
-    - name: Parse expiry date into datetime object
-      set_fact:
-        expiry_date_obj: "{{ expiry_output.stdout | to_datetime('%b %d, %Y') }}"
-      when:
-        - expiry_output.stdout is defined
-        - expiry_output.stdout != 'never'
+PLAY RECAP **************************************************************************************************************************
+172.27.67.32               : ok=2    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0
 
-    - name: Parse current date into datetime object
-      set_fact:
-        current_date_obj: "{{ ansible_date_time.date + ' ' + ansible_date_time.time | to_datetime('%Y-%m-%d %H:%M:%S') }}"
-      when: expiry_output.stdout != 'never'
-
-    - name: Calculate number of days to expiry
-      set_fact:
-        days_to_expiry: "{{ ((expiry_date_obj - current_date_obj).total_seconds() // 86400) | int }}"
-      when:
-        - expiry_date_obj is defined
-        - current_date_obj is defined
-
-    - name: Show warning for expiring passwords
-      debug:
-        msg: >-
-          {{ inventory_hostname }}: password for {{ user_to_check }} expires in {{ days_to_expiry }} days 🚨 Warning: Expiry within {{ warning_days }} days!
-      when: days_to_expiry is defined and (days_to_expiry | int) <= (warning_days | int)
-      register: warning_msg
-
-    - name: Append warning to summary file
-      lineinfile:
-        path: /var/lib/jenkins/ansible/warning_summary.txt
-        line: |
-          ok: [{{ inventory_hostname }}] => {
-              "msg": "{{ warning_msg.msg }}"
-          }
-        create: yes
-        mode: '0644'
-        state: present
-        insertafter: EOF
-      when: warning_msg is defined and warning_msg.msg is defined
-      delegate_to: localhost
+[jenkins@k8s-master devopscore_ansible]$ sudo vim check_expiry.yaml
+[jenkins@k8s-master devopscore_a
 
