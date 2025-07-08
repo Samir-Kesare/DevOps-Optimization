@@ -3,30 +3,36 @@ pipeline {
 
     parameters {
         choice(name: 'env', choices: ['prod', 'uat'], description: 'Please Select Environment')
+
         choice(name: 'OPCO_NAME', choices: ['ug', 'ng', 'zm', 'cd', 'cg', 'ga', 'mg', 'mw', 'ne', 'sc', 'td', 'tz', 'ke', 'rw', 'ngpsb', 'ngpsbloadtest'], description: 'Select OPCO Name')
-        choice(name: 'namespace', choices: ['default', 'mfs', 'maestro'], description: 'Select Namespace')
-        
-        // Multi-choice parameter for services
-        choice(name: 'service', choices: ['collective', 'ds2', 'cms-backend-service', 'cms-backend-ui', 'cm', 'cust-profile', 'identity-verification', 'Notification-service', 'am-profile', 'customer-status', 'retailer-gateway', 'risk-eval', 'abtest', 'adapter-service', 'airtel-payment-options', 'async-report-service', 'bfe-gateway', 'Change-plan-service', 'cache-mgmt-service', 'data-service', 'dnd-service', 'email-notification-consumer', 'email-notifications', 'enterprise-service', 'esb-consumer-service', 'esb-logging-consumer-service', 'esb-logging-producer-service', 'external-gateway-service', 'hbb-service', 'hr-directory', 'loan-service', 'multi-datasource-service', 'nconsumer', 'network-service', 'nproducer', 'number-management-service', 'ods-data-service', 'pg-services', 'product-catalog', 'recharge-service-new', 'regulatory-service', 'reporting-service', 'ringback-tones', 'rscheduler-service', 'scheduler-service', 'sms-notifications', 'subscriber-consent', 'subscriber-product', 'subscriber-profile', 'subscriber-transaction-new', 'user-service', 'vas-service', 'vass-service', 'voucher-service', 'bonus-service', 'Subscriber history', 'esb-graph-service', 'Chat-notification-service', 'bonus-service', 'subscriber-device', 'cache-mgmt-service', 'customer-onboarding-service', 'customer-profile-service', 'service-provisioning-platform', 'cacq-cm', 'qna', 'subscriber-balance', 'cache-mgmt-service', 'hbb-mail-notification-service', 'bonus-service', 'chat-notification-service', 'nconsumer', 'esb-subscriber-device', 'bfe-gateway-service', 'reporting-service', 'rscheduler-service', 'vass-service', 'esb-edge-service', 'subscriber-consent', 'loan-service', 'rubik-case-management', 'rubik-event-api', 'case-management-bgservice'], description: 'Select Service')
-        
+
         choice(name: 'keda', choices: ['enabled', 'disabled'], description: 'Keda Status')
+
+        extendedChoice(
+            name: 'namespace',
+            type: 'PT_CHECKBOX',
+            multiSelectDelimiter: ',',
+            description: 'Select Namespaces',
+            value: 'default,mfs,maestro'
+        )
+
+        extendedChoice(
+            name: 'service',
+            type: 'PT_CHECKBOX',
+            multiSelectDelimiter: ',',
+            description: 'Select Services',
+            value: 'collective,ds2,cms-backend-service,cms-backend-ui,cm,cust-profile,identity-verification,Notification-service,am-profile,customer-status,retailer-gateway,risk-eval,abtest,adapter-service,airtel-payment-options,async-report-service,bfe-gateway,Change-plan-service,cache-mgmt-service,data-service,dnd-service,email-notification-consumer,email-notifications,enterprise-service,esb-consumer-service,esb-logging-consumer-service,esb-logging-producer-service,external-gateway-service,hbb-service,hr-directory,loan-service,multi-datasource-service,nconsumer,network-service,nproducer,number-management-service,ods-data-service,pg-services,product-catalog,recharge-service-new,regulatory-service,reporting-service,ringback-tones,rscheduler-service,scheduler-service,sms-notifications,subscriber-consent,subscriber-product,subscriber-profile,subscriber-transaction-new,user-service,vas-service,vass-service,voucher-service,bonus-service,Subscriber history,esb-graph-service,Chat-notification-service,subscriber-device,customer-onboarding-service,customer-profile-service,service-provisioning-platform,cacq-cm,qna,subscriber-balance,hbb-mail-notification-service,chat-notification-service,esb-subscriber-device,bfe-gateway-service,esb-edge-service,rubik-case-management,rubik-event-api,case-management-bgservice'
+        )
     }
 
     stages {
         stage('Preparation') {
             steps {
                 script {
-                    // Clean the workspace
                     cleanWs()
+                    echo "Cloning repository..."
+                    sh 'rm -rf keda && git clone https://bitbucket.airtel.africa/bitbucket/scm/atlaf/keda.git'
 
-                    // Clone the Bitbucket repository for Keda configuration
-                    if (!fileExists('keda')) {
-                        sh 'git clone https://bitbucket.airtel.africa/bitbucket/scm/atlaf/keda.git'
-                    } else {
-                        echo "Repository 'keda' already exists. Skipping clone."
-                    }
-
-                    // Define IP addresses based on environment and OPCO_NAME
                     def prodIP = [
                         ke: '172.23.7.102', mw: '172.26.128.101', ga: '172.25.118.125', mg: '172.25.128.181',
                         ne: '172.26.193.149', cg: '172.25.64.209', zm: '172.27.128.119', cd: '172.26.38.126',
@@ -41,12 +47,15 @@ pipeline {
                         ug: '172.27.82.150', zm: '172.27.146.167', ngpsb: '172.24.31.11', ngpsbloadtest: '172.24.30.224'
                     ]
 
-                    // Determine the k8s server IP based on the selected environment and OPCO_NAME
                     if (params.env == 'uat') {
                         env.k8sserver = uatIP[params.OPCO_NAME]
                     } else if (params.env == 'prod') {
                         env.k8sserver = prodIP[params.OPCO_NAME]
                     }
+
+                    echo "🌐 Selected K8s Master IP: ${env.k8sserver}"
+                    echo "Selected Namespaces: ${params.namespace}"
+                    echo "Selected Services: ${params.service}"
                 }
             }
         }
@@ -54,10 +63,21 @@ pipeline {
         stage('Deploy Keda Configuration') {
             steps {
                 script {
-                    if (params.keda == 'enabled') {
-                        echo "Keda is Enabled for ${params.service} in ${params.OPCO_NAME} environment and Service replica will work normally now"
-                    } else if (params.keda == 'disabled') {
-                        echo "Keda is Disabled for ${params.service} in ${params.OPCO_NAME} environment and Service replica's are scaled down to 0"
+                    def namespaces = params.namespace.split(',')
+                    def services = params.service.split(',')
+
+                    for (ns in namespaces) {
+                        for (svc in services) {
+                            echo "🚀 Processing service '${svc}' in namespace '${ns}'"
+
+                            if (params.keda == 'enabled') {
+                                echo "✅ Enabling KEDA for ${svc}"
+                                // Add enabling logic here
+                            } else if (params.keda == 'disabled') {
+                                echo "❌ Disabling KEDA for ${svc}"
+                                // Add disabling logic here
+                            }
+                        }
                     }
                 }
             }
@@ -66,8 +86,8 @@ pipeline {
 
     post {
         always {
-            echo 'Cleaning up...'
-            // Add any cleanup steps if necessary
+            echo '🧹 Cleaning up...'
+            cleanWs()
         }
     }
 }
