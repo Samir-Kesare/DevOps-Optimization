@@ -26,4 +26,56 @@ pipeline {
             }
         }
 
-        stage('Pars
+        stage('Parse Server List') {
+            steps {
+                script {
+                    def servers = env.SERVER_LIST.split(',').collect { entry ->
+                        def parts = entry.split(':')
+                        [name: parts[0].trim(), ip: parts[1].trim()]
+                    }
+
+                    env.PARSED_SERVERS = writeJSON returnText: true, json: servers
+                    echo "✅ Target Servers: ${servers.collect { "${it.name}(${it.ip})" }.join(', ')}"
+                }
+            }
+        }
+
+        stage('Copy and Execute Script') {
+            steps {
+                script {
+                    def servers = readJSON text: env.PARSED_SERVERS
+
+                    servers.each { server ->
+                        echo "🔧 Working on ${server.name} (${server.ip})"
+
+                        sh """
+                            scp -P ${env.SSH_PORT} ${env.LOCAL_SCRIPT} ${env.SSH_USER}@${server.ip}:${env.REMOTE_SCRIPT}
+                            ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${server.ip} 'chmod +x ${env.REMOTE_SCRIPT} && bash ${env.REMOTE_SCRIPT}'
+                            ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${server.ip} 'cat /tmp/Default_conn.txt' > ${env.REPORT_LOG}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Send Email Report') {
+            steps {
+                script {
+                    emailext(
+                        subject: "[PGPool Report] Hourly Connection Report - ${env.REPORT_TIMESTAMP}",
+                        body: "Hello Team,<br><br>Please find the attached PGPool connection report.<br><br>Regards,<br>Jenkins",
+                        to: "${env.EMAIL_RECIPIENTS}",
+                        attachmentsPattern: "${env.REPORT_LOG}",
+                        mimeType: 'text/html'
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
