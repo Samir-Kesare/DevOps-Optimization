@@ -4,73 +4,36 @@ pipeline {
     parameters {
         choice(name: 'env', choices: ['prod', 'uat'], description: 'Please Select Environment')
         choice(name: 'OPCO_NAME', choices: ['ug', 'ng', 'zm', 'cd', 'cg', 'ga', 'mg', 'mw', 'ne', 'sc', 'td', 'tz', 'ke', 'rw', 'ngpsb', 'ngpsbloadtest'], description: 'Select OPCO Name')
-        choice(name: 'keda', choices: ['enabled', 'disabled', 'toggle'], description: 'Keda Status')
-        choice(name: 'service', choices: ['collective', 'ds2', 'cms-backend-service', 'cms-backend-ui'], description: 'Select Service')
         choice(name: 'namespace', choices: ['default', 'mfs', 'maestro'], description: 'Select Namespace')
-        string(name: 'minReplicaCount', defaultValue: '1', description: 'Minimum Replica Count (used if toggle selected)')
-        string(name: 'maxReplicaCount', defaultValue: '5', description: 'Maximum Replica Count (used if toggle selected)')
-        string(name: 'replica', defaultValue: '1', description: 'Replica Count (used if toggle selected)')
-        string(name: 'threshold', defaultValue: '80', description: 'Threshold Value (used if toggle selected)')
-    }
-
-    environment {
-        SSH_USER = 'esbuser'
-        SSH_PORT = '922'
-        GIT_REPO = 'https://bitbucket.airtel.africa/bitbucket/scm/atlaf/keda.git'
-        GIT_USER = 'jenkins-africa@noreply.airtel.africa'
-        GIT_USERNAME = 'Jenkins'
+        
+        // Multi-choice parameter for services
+        choice(name: 'service', choices: ['collective', 'ds2', 'cms-backend-service', 'cms-backend-ui', 'cm', 'cust-profile', 'identity-verification', 'Notification-service', 'am-profile', 'customer-status', 'retailer-gateway', 'risk-eval', 'abtest', 'adapter-service', 'airtel-payment-options', 'async-report-service', 'bfe-gateway', 'Change-plan-service', 'cache-mgmt-service', 'data-service', 'dnd-service', 'email-notification-consumer', 'email-notifications', 'enterprise-service', 'esb-consumer-service', 'esb-logging-consumer-service', 'esb-logging-producer-service', 'external-gateway-service', 'hbb-service', 'hr-directory', 'loan-service', 'multi-datasource-service', 'nconsumer', 'network-service', 'nproducer', 'number-management-service', 'ods-data-service', 'pg-services', 'product-catalog', 'recharge-service-new', 'regulatory-service', 'reporting-service', 'ringback-tones', 'rscheduler-service', 'scheduler-service', 'sms-notifications', 'subscriber-consent', 'subscriber-product', 'subscriber-profile', 'subscriber-transaction-new', 'user-service', 'vas-service', 'vass-service', 'voucher-service', 'bonus-service', 'Subscriber history', 'esb-graph-service', 'Chat-notification-service', 'bonus-service', 'subscriber-device', 'cache-mgmt-service', 'customer-onboarding-service', 'customer-profile-service', 'service-provisioning-platform', 'cacq-cm', 'qna', 'subscriber-balance', 'cache-mgmt-service', 'hbb-mail-notification-service', 'bonus-service', 'chat-notification-service', 'nconsumer', 'esb-subscriber-device', 'bfe-gateway-service', 'reporting-service', 'rscheduler-service', 'vass-service', 'esb-edge-service', 'subscriber-consent', 'loan-service', 'rubik-case-management', 'rubik-event-api', 'case-management-bgservice'], description: 'Select Service')
+        
+        choice(name: 'keda', choices: ['enabled', 'disabled'], description: 'Keda Status')
     }
 
     stages {
-        stage('Extract Jenkins User') {
-            steps {
-                cleanWs()
-                script {
-                    def logPath = "${JENKINS_HOME}/jobs/Infra-automation/jobs/Development/jobs/DevOps_Automation/jobs/keda_toggle_test/builds/${BUILD_ID}/log"
-                    sh """
-                        echo "Reading log: ${logPath}"
-                        cat ${logPath} > log.txt || true
-                        user_id=\$(cat log.txt | grep -i "Started" | sed "s@Started by user @@")
-                        echo "\$user_id" > user_id.txt
-                    """
-                    def rawUserId = readFile('user_id.txt').trim()
-                    env.CLEAN_USER_ID = rawUserId.find(/\d{6,10}$/) ?: "unknown-user"
-                    echo "✅ Clean USER_ID: ${env.CLEAN_USER_ID}"
-                }
-            }
-        }
-
         stage('Preparation') {
             steps {
                 script {
-                    echo "Selected environment: ${params.env}"
-                    echo "Selected OPCO: ${params.OPCO_NAME}"
-                    echo "Selected KEDA option: ${params.keda}"
-                    echo "Service: ${params.service}"
-                    echo "Namespace: ${params.namespace}"
+                    // Clean the workspace
+                    cleanWs()
 
-                    if (params.keda == 'toggle') {
-                        echo "Toggle Parameters:"
-                        echo "  Min Replica Count: ${params.minReplicaCount}"
-                        echo "  Max Replica Count: ${params.maxReplicaCount}"
-                        echo "  Replica Count: ${params.replica}"
-                        echo "  Threshold: ${params.threshold}"
+                    // Clone the Bitbucket repository for Keda configuration
+                    if (!fileExists('keda')) {
+                        sh 'git clone https://bitbucket.airtel.africa/bitbucket/scm/atlaf/keda.git'
                     } else {
-                        echo "Skipping toggle parameters — not required."
+                        echo "Repository 'keda' already exists. Skipping clone."
                     }
-                }
-            }
-        }
 
-        stage('Set Kubernetes Master IP') {
-            steps {
-                script {
+                    // Define IP addresses based on environment and OPCO_NAME
                     def prodIP = [
                         ke: '172.23.7.102', mw: '172.26.128.101', ga: '172.25.118.125', mg: '172.25.128.181',
                         ne: '172.26.193.149', cg: '172.25.64.209', zm: '172.27.128.119', cd: '172.26.38.126',
                         rw: '172.27.193.85', ngpsb: '172.24.30.11', td: '172.25.49.170', sc: '172.25.192.172',
                         ng: '172.24.6.215', ug: '172.27.98.166', tz: '172.27.0.142'
                     ]
+
                     def uatIP = [
                         cd: '172.26.18.29', cg: '172.25.67.229', ga: '172.25.119.191', ke: '172.23.36.206',
                         mg: '172.25.131.133', mw: '172.26.146.190', ne: '172.26.211.41', ng: '172.24.35.202',
@@ -78,14 +41,12 @@ pipeline {
                         ug: '172.27.82.150', zm: '172.27.146.167', ngpsb: '172.24.31.11', ngpsbloadtest: '172.24.30.224'
                     ]
 
-                    def selectedMap = params.env == 'prod' ? prodIP : uatIP
-
-                    if (!selectedMap.containsKey(params.OPCO_NAME)) {
-                        error "❌ OPCO '${params.OPCO_NAME}' is not defined for '${params.env}' environment"
+                    // Determine the k8s server IP based on the selected environment and OPCO_NAME
+                    if (params.env == 'uat') {
+                        env.k8sserver = uatIP[params.OPCO_NAME]
+                    } else if (params.env == 'prod') {
+                        env.k8sserver = prodIP[params.OPCO_NAME]
                     }
-
-                    env.k8sserver = selectedMap[params.OPCO_NAME]
-                    echo "🌐 Selected Kubernetes master IP: ${env.k8sserver}"
                 }
             }
         }
@@ -94,49 +55,9 @@ pipeline {
             steps {
                 script {
                     if (params.keda == 'enabled') {
-                        echo "✅ Enabling KEDA for ${params.service}"
-                        // Add enabling logic here
+                        echo "Keda is Enabled for ${params.service} in ${params.OPCO_NAME} environment and Service replica will work normally now"
                     } else if (params.keda == 'disabled') {
-                        echo "❌ Disabling KEDA for ${params.service}"
-                        // Add disabling logic here
-                    } else if (params.keda == 'toggle') {
-                        echo "🔁 Applying KEDA toggle config"
-
-                        sh "git clone ${env.GIT_REPO} keda-repo"
-
-                        dir('keda-repo') {
-                            def kedaFile = "${params.OPCO_NAME}-keda-scaler/${params.namespace}/${params.service}_keda_scaledobject.yaml"
-
-                            echo "🔍 Original YAML:"
-                            sh "cat ${kedaFile}"
-
-                            sh """
-                                sed -i 's/minReplicaCount: .*/minReplicaCount: ${params.minReplicaCount}/' ${kedaFile}
-                                sed -i 's/maxReplicaCount: .*/maxReplicaCount: ${params.maxReplicaCount}/' ${kedaFile}
-                                sed -i 's/replicas: .*/replicas: ${params.replica}/' ${kedaFile}
-                                sed -i 's/value: \".*\"/value: \"${params.threshold}\"/' ${kedaFile}
-                            """
-
-                            echo "📝 Updated YAML:"
-                            sh "cat ${kedaFile}"
-
-                            sh "scp -P ${env.SSH_PORT} ${kedaFile} ${env.SSH_USER}@${env.k8sserver}:/tmp/${params.service}_keda_scaledobject.yaml"
-                            sh "ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${env.k8sserver} 'kubectl apply -f /tmp/${params.service}_keda_scaledobject.yaml -n ${params.namespace} --dry-run=client'"
-
-                            echo "✅ KEDA config dry-run complete."
-
-                            def branch = "feature/${params.OPCO_NAME}-${env.BUILD_ID}"
-                            sh """
-                                git config user.name '${env.CLEAN_USER_ID}'
-                                git config user.email '${env.CLEAN_USER_ID}@airtel.africa'
-                                git checkout -b ${branch}
-                                git add ${kedaFile}
-                                git commit -m "Updated ScaledObject for ${params.service} (${params.OPCO_NAME}) by ${env.CLEAN_USER_ID}"
-                                git push --dry-run origin ${branch}
-                            """
-
-                            echo "✅ Dry-run git push to branch: ${branch}"
-                        }
+                        echo "Keda is Disabled for ${params.service} in ${params.OPCO_NAME} environment and Service replica's are scaled down to 0"
                     }
                 }
             }
@@ -145,13 +66,8 @@ pipeline {
 
     post {
         always {
-            cleanWs()
-        }
-        success {
-            echo "✅ KEDA pipeline completed successfully."
-        }
-        failure {
-            echo "❌ KEDA pipeline failed."
+            echo 'Cleaning up...'
+            // Add any cleanup steps if necessary
         }
     }
 }
