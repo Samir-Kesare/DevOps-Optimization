@@ -1,8 +1,8 @@
 pipeline {
     agent any
-    
+
     triggers {
-        cron('30 9,13,17 * * *')
+        cron('H * * * *') // Runs every hour at a random minute (H)
     }
 
     environment {
@@ -13,9 +13,11 @@ pipeline {
         LOCAL_SCRIPT = "/app/jenkins/pgpool_connection/pgpool_connections_script.sh"
         EMAIL_RECIPIENTS = "a_samir.kesare@africa.airtel.com"
         REPORT_TIMESTAMP = "${new Date().format('yyyy-MM-dd_HH-mm-ss')}"
+        REPORT_LOG = "pgpool_conn_report_${REPORT_TIMESTAMP}.log"
     }
 
     stages {
+
         stage('Parse Server List') {
             steps {
                 script {
@@ -30,11 +32,45 @@ pipeline {
             }
         }
 
-        stage('Prepare Script') {
+        stage('Copy and Execute Script') {
             steps {
-                sh 'sudo chmod +x $LOCAL_SCRIPT' // Ensure the script is executable
+                script {
+                    def servers = readJSON text: env.PARSED_SERVERS
+
+                    servers.each { server ->
+                        echo "🔧 Working on ${server.name} (${server.ip})"
+
+                        sh """
+                            scp -P $SSH_PORT $LOCAL_SCRIPT $SSH_USER@${server.ip}:$REMOTE_SCRIPT
+                            ssh -p $SSH_PORT $SSH_USER@${server.ip} 'chmod +x $REMOTE_SCRIPT && bash $REMOTE_SCRIPT'
+                            ssh -p $SSH_PORT $SSH_USER@${server.ip} 'cat /tmp/Default_conn.txt' > $REPORT_LOG
+                        """
+                    }
+                }
             }
         }
+
+        stage('Send Email Report') {
+            steps {
+                script {
+                    emailext(
+                        subject: "[PGPool Report] Hourly Connection Report - ${REPORT_TIMESTAMP}",
+                        body: "Hello Team,<br><br>Please find the attached PGPool connection report.<br><br>Regards,<br>Jenkins",
+                        to: "${EMAIL_RECIPIENTS}",
+                        attachmentsPattern: "${REPORT_LOG}",
+                        mimeType: 'text/html'
+                    )
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
 
         stage('Distribute & Execute Script') {
             steps {
