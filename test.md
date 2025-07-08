@@ -1,81 +1,86 @@
-pipeline {
-    agent any
++ scp -P 922 /app/jenkins/pgpool_connection/pgpool_connections_script.sh esbuser@172.23.36.206:/tmp/pgpool_connections_script.sh
+***********************************************************************************************************************
+WARNING: Unauthorized access to this system is strictly prohibited.
+All activity is monitored and logged.
+***********************************************************************************************************************
 
-    triggers {
-        cron('H * * * *') // Runs every hour at a random minute
-    }
+  ____          _ _           _     _____       _                       _            _     _                     ___
+ |  _ \ ___  __| | |__   __ _| |_  | ____|_ __ | |_ ___ _ __ _ __  _ __(_)___  ___  | |   (_)_ __  _   ___  __  / _ \
+ | |_) / _ \/ _` | '_ \ / _` | __| |  _| | '_ \| __/ _ \ '__| '_ \| '__| / __|/ _ \ | |   | | '_ \| | | \ \/ / | (_) |
+ |  _ <  __/ (_| | | | | (_| | |_  | |___| | | | ||  __/ |  | |_) | |  | \__ \  __/ | |___| | | | | |_| |>  <   \__, |
+ |_| \_\___|\__,_|_| |_|\__,_|\__| |_____|_| |_|\__\___|_|  | .__/|_|  |_|___/\___| |_____|_|_| |_|\__,_/_/\_\    /_/
+                                                            |_|
 
-    environment {
-        SERVER_LIST = "KE:172.23.36.206"
-        SSH_USER = "esbuser"
-        SSH_PORT = "922"
-        REMOTE_SCRIPT = "/tmp/pgpool_connections_script.sh"
-        LOCAL_SCRIPT = "/app/jenkins/pgpool_connection/pgpool_connections_script.sh"
-        EMAIL_RECIPIENTS = "a_samir.kesare@africa.airtel.com"
-    }
+Kernel: 
+PROJECT:
+Application:
+------------------------------------------------------------------------------------------------------------------------
++ ssh -p 922 esbuser@172.23.36.206 'chmod +x /tmp/pgpool_connections_script.sh && bash /tmp/pgpool_connections_script.sh'
+***********************************************************************************************************************
+WARNING: Unauthorized access to this system is strictly prohibited.
+All activity is monitored and logged.
+***********************************************************************************************************************
 
-    stages {
+  ____          _ _           _     _____       _                       _            _     _                     ___
+ |  _ \ ___  __| | |__   __ _| |_  | ____|_ __ | |_ ___ _ __ _ __  _ __(_)___  ___  | |   (_)_ __  _   ___  __  / _ \
+ | |_) / _ \/ _` | '_ \ / _` | __| |  _| | '_ \| __/ _ \ '__| '_ \| '__| / __|/ _ \ | |   | | '_ \| | | \ \/ / | (_) |
+ |  _ <  __/ (_| | | | | (_| | |_  | |___| | | | ||  __/ |  | |_) | |  | \__ \  __/ | |___| | | | | |_| |>  <   \__, |
+ |_| \_\___|\__,_|_| |_|\__,_|\__| |_____|_| |_|\__\___|_|  | .__/|_|  |_|___/\___| |_____|_|_| |_|\__,_/_/\_\    /_/
+                                                            |_|
 
-        stage('Init Report Variables') {
-            steps {
-                script {
-                    // Move dynamic values to script scope
-                    env.REPORT_TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
-                    env.REPORT_LOG = "pgpool_conn_report_${env.REPORT_TIMESTAMP}.log"
-                }
-            }
-        }
+Kernel: 
+PROJECT:
+Application:
+------------------------------------------------------------------------------------------------------------------------
+rm: cannot remove '/tmp/Default_conn.txt': Operation not permitted
+Unable to use a TTY - input is not a terminal or the right kind of file
+Unable to use a TTY - input is not a terminal or the right kind of file
+Unable to use a TTY - input is not a terminal or the right kind of file
+Unable to use a TTY - input is not a terminal or the right kind of file
+Unable to use a TTY - input is not a terminal or the right kind of file
+Unable to use a TTY - input is not a terminal or the right kind of file
++--------------------+---------------------+---------------------+
+| Namespace          | Total Connections   | Available           |
++--------------------+---------------------+---------------------+
+| default            |                 488 |                 197 |
+| am-finrep          |                 108 |                  63 |
++--------------------+---------------------+---------------------+
 
-        stage('Parse Server List') {
-            steps {
-                script {
-                    def servers = env.SERVER_LIST.split(',').collect { entry ->
-                        def parts = entry.split(':')
-                        [name: parts[0].trim(), ip: parts[1].trim()]
-                    }
+Default Namespace Connection Details
+Count#ServiceName
+195#wait
+51#rubik_services
+37#pnpbulk_services
+29#workflow_services
+27#abgateway_services
+22#ppo_services
+15#casemgmt_services
+10#churn_services
+8#auc_services
+7#notify_services
+6#in_services
+6#empapp_services
+6#charging_services
+6#canvas_services
+5#user_services
+5#provision_services
+5#finrep_services
+5#cms_services
+5#bigben_services
+4#qna_services
+3#usermgmt_services
+3#targetmgmt_services
+3#salesprofile_services
+3#epprofile_services
+3#codegenerator_services
+3#cockpit_services
+3#air_services
+2#cp_services
+1#postgres
+1#bulkupload_services
 
-                    env.PARSED_SERVERS = writeJSON returnText: true, json: servers
-                    echo "✅ Target Servers: ${servers.collect { "${it.name}(${it.ip})" }.join(', ')}"
-                }
-            }
-        }
-
-        stage('Copy and Execute Script') {
-            steps {
-                script {
-                    def servers = readJSON text: env.PARSED_SERVERS
-
-                    servers.each { server ->
-                        echo "🔧 Working on ${server.name} (${server.ip})"
-
-                        sh """
-                            scp -P ${env.SSH_PORT} ${env.LOCAL_SCRIPT} ${env.SSH_USER}@${server.ip}:${env.REMOTE_SCRIPT}
-                            ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${server.ip} 'chmod +x ${env.REMOTE_SCRIPT} && bash ${env.REMOTE_SCRIPT}'
-                            ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${server.ip} 'cat /tmp/Default_conn.txt' > ${env.REPORT_LOG}
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Send Email Report') {
-            steps {
-                script {
-                    emailext(
-                        subject: "[PGPool Report] Hourly Connection Report - ${env.REPORT_TIMESTAMP}",
-                        body: "Hello Team,<br><br>Please find the attached PGPool connection report.<br><br>Regards,<br>Jenkins",
-                        to: "${env.EMAIL_RECIPIENTS}",
-                        attachmentsPattern: "${env.REPORT_LOG}",
-                        mimeType: 'text/html'
-                    )
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            cleanWs()
-        }
-    }
-}
+am-finrep Namespace Connection Details
+Count#ServiceName
+60#wait
+39#amfinrep_services
+tee: /tmp/Default_conn.txt: Permission denied
