@@ -1,124 +1,127 @@
-pipeline {
-    agent any
+Started by user 23203615
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins in /app/jenkins/workspace/Infra-automation/Development/DevOps_Automation/keda_toggle_test
+[Pipeline] {
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Extract Jenkins User)
+[Pipeline] cleanWs
+[WS-CLEANUP] Deleting project workspace...
+[WS-CLEANUP] Deferred wipeout is used...
+[WS-CLEANUP] done
+[Pipeline] script
+[Pipeline] {
+[Pipeline] sh
++ echo 'Reading log: /app/jenkins/jobs/Infra-automation/jobs/Development/jobs/DevOps_Automation/jobs/keda_toggle_test/builds/60/log'
+Reading log: /app/jenkins/jobs/Infra-automation/jobs/Development/jobs/DevOps_Automation/jobs/keda_toggle_test/builds/60/log
++ cat /app/jenkins/jobs/Infra-automation/jobs/Development/jobs/DevOps_Automation/jobs/keda_toggle_test/builds/60/log
+++ cat log.txt
+++ grep -i Started
+++ sed 's@Started by user @@'
++ user_id='23203615'
++ echo '23203615'
+[Pipeline] readFile
+[Pipeline] echo
+✅ Clean USER_ID: 23203615
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Set Kubernetes Master IP)
+[Pipeline] script
+[Pipeline] {
+[Pipeline] echo
+🌐 Selected Kubernetes master IP: 172.27.98.166
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Keda Toggle)
+[Pipeline] script
+[Pipeline] {
+[Pipeline] echo
+🔁 Applying KEDA toggle config
+[Pipeline] sh
++ git clone https://bitbucket.airtel.africa/bitbucket/scm/atlaf/keda.git keda-repo
+Cloning into 'keda-repo'...
+[Pipeline] dir
+Running in /app/jenkins/workspace/Infra-automation/Development/DevOps_Automation/keda_toggle_test/keda-repo
+[Pipeline] {
+[Pipeline] pwd
+[Pipeline] echo
+🔍 Original YAML:
+[Pipeline] sh
++ cat ug-keda-scaler/default/collective_keda_scaledobject.yaml
 
-    parameters {
-        choice(name: 'env', choices: ['prod', 'uat'], description: 'Please Select Environment')
-        choice(name: 'OPCO_NAME', choices: ['ug', 'ng', 'zm', 'cd', 'cg', 'ga', 'mg', 'mw', 'ne', 'sc', 'td', 'tz', 'ke', 'rw', 'ngpsb', 'ngpsbloadtest'], description: 'Select OPCO Name')
-        string(name: 'keda', defaultValue: 'toggle', description: 'Keda Status')
-        choice(name: 'service', choices: ['collective', 'ds2', 'cms-backend-service', 'cms-backend-ui'], description: 'Select Service')
-        choice(name: 'namespace', choices: ['default', 'mfs', 'maestro'], description: 'Select Namespace')
-        string(name: 'minReplicaCount', defaultValue: '1', description: 'Minimum Replica Count')
-        string(name: 'maxReplicaCount', defaultValue: '5', description: 'Maximum Replica Count')
-        string(name: 'replica', defaultValue: '1', description: 'Replica Count')
-        string(name: 'threshold', defaultValue: '80', description: 'Threshold Value')
-    }
-
-    environment {
-        SSH_USER = 'esbuser'
-        SSH_PORT = '922'
-        GIT_REPO = 'https://bitbucket.airtel.africa/bitbucket/scm/atlaf/keda.git'
-    }
-
-    stages {
-        stage('Extract Jenkins User') {
-            steps {
-                cleanWs()
-                script {
-                    def logPath = "${JENKINS_HOME}/jobs/Infra-automation/jobs/Development/jobs/DevOps_Automation/jobs/keda_toggle_test/builds/${BUILD_ID}/log"
-                    sh """
-                        echo "Reading log: ${logPath}"
-                        cat ${logPath} > log.txt || true
-                        user_id=\$(cat log.txt | grep -i "Started" | sed "s@Started by user @@")
-                        echo "\$user_id" > user_id.txt
-                    """
-                    def rawUserId = readFile('user_id.txt').trim()
-                    env.CLEAN_USER_ID = rawUserId.find(/\d{6,10}$/) ?: "unknown-user"
-                    echo "✅ Clean USER_ID: ${env.CLEAN_USER_ID}"
-                }
-            }
-        }
-
-        stage('Set Kubernetes Master IP') {
-            steps {
-                script {
-                    def prodIP = [
-                        ke: '172.23.7.102', mw: '172.26.128.101', ga: '172.25.118.125', mg: '172.25.128.181',
-                        ne: '172.26.193.149', cg: '172.25.64.209', zm: '172.27.128.119', cd: '172.26.38.126',
-                        rw: '172.27.193.85', ngpsb: '172.24.30.11', td: '172.25.49.170', sc: '172.25.192.172',
-                        ng: '172.24.6.215', ug: '172.27.98.166', tz: '172.27.0.142'
-                    ]
-                    def uatIP = [
-                        cd: '172.26.18.29', cg: '172.25.67.229', ga: '172.25.119.191', ke: '172.23.36.206',
-                        mg: '172.25.131.133', mw: '172.26.146.190', ne: '172.26.211.41', ng: '172.24.35.202',
-                        rw: '172.27.210.164', sc: '172.25.195.226', td: '172.25.49.191', tz: '172.27.18.120',
-                        ug: '172.27.82.150', zm: '172.27.146.167', ngpsb: '172.24.31.11', ngpsbloadtest: '172.24.30.224'
-                    ]
-
-                    def selectedMap = params.env == 'prod' ? prodIP : uatIP
-
-                    if (!selectedMap.containsKey(params.OPCO_NAME)) {
-                        error "❌ OPCO '${params.OPCO_NAME}' is not defined for '${params.env}' environment"
-                    }
-
-                    env.k8sserver = selectedMap[params.OPCO_NAME]
-                    echo "🌐 Selected Kubernetes master IP: ${env.k8sserver}"
-                }
-            }
-        }
-
-        stage('Keda Toggle') {
-            steps {
-                script {
-                    echo "🔁 Applying KEDA toggle config"
-
-                    sh "git clone ${env.GIT_REPO} keda-repo"
-
-                    dir('keda-repo') {
-                        def kedaFile = "${params.OPCO_NAME}-keda-scaler/${params.namespace}/${params.service}_keda_scaledobject.yaml"
-                        def kedapath = "${pwd()}/${kedaFile}"
-
-                        echo "🔍 Original YAML:"
-                        sh "cat ${kedaFile}"
-
-                        sh """
-                            sed -i 's/^  minReplicaCount: .*/  minReplicaCount: ${params.minReplicaCount}/' ${kedaFile}
-                            sed -i 's/^  maxReplicaCount: .*/  maxReplicaCount: ${params.maxReplicaCount}/' ${kedaFile}
-                            sed -i 's/^  replicas: .*/  replicas: ${params.replica}/' ${kedaFile}
-                            sed -i '/type: prometheus/,/threshold:/s/threshold: .*/threshold: \\'${params.threshold}\\'/' ${kedaFile}
-                        """
-
-                        echo "📝 Updated YAML:"
-                        sh "cat ${kedaFile}"
-
-                        sh "scp -P ${env.SSH_PORT} ${kedapath} ${env.SSH_USER}@${env.k8sserver}:/tmp/${params.service}_keda_scaledobject.yaml"
-                        sh "ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${env.k8sserver} 'kubectl apply -f /tmp/${params.service}_keda_scaledobject.yaml -n ${params.namespace} --dry-run=client'"
-
-                        def branch = "feature/${params.OPCO_NAME}-${env.BUILD_ID}"
-                        sh """
-                            git config user.name '${env.CLEAN_USER_ID}'
-                            git config user.email '${env.CLEAN_USER_ID}@airtel.africa'
-                            git checkout -b ${branch}
-                            git add ${kedaFile}
-                            git commit -m "Updated ScaledObject for ${params.service} (${params.OPCO_NAME}) by ${env.CLEAN_USER_ID}"
-                            git push --dry-run origin ${branch}
-                        """
-
-                        echo "✅ Dry-run git push to branch: ${branch}"
-                    }
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            cleanWs()
-        }
-        success {
-            echo "✅ KEDA pipeline completed successfully."
-        }
-        failure {
-            echo "❌ KEDA pipeline failed."
-        }
-    }
-}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: collective-keda-scaledobject
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: collective
+  pollingInterval: 5
+  cooldownPeriod: 300
+  minReplicaCount: 6
+  maxReplicaCount: 8
+  fallback:
+    failureThreshold: 3
+    replicas: 6
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 120
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 120
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://rancher-monitoring-devops-prometheus.cattle-monitoring-system:9090
+        metricName: container_network_receive_bytes_total
+        query: sum(irate(container_network_receive_bytes_total{cluster="",namespace=~"default"}[5m]) * on (namespace,pod) group_left(workload,workload_type) namespace_workload_pod:kube_pod_owner:relabel{cluster="",namespace=~"default", workload=~"collective", workload_type="deployment"})
+        threshold: '1870000'
+        ignoreNullValues: "true"
+[Pipeline] sh
++ sed -i 's/^  minReplicaCount: .*/  minReplicaCount: 1/' ug-keda-scaler/default/collective_keda_scaledobject.yaml
++ sed -i 's/^  maxReplicaCount: .*/  maxReplicaCount: 5/' ug-keda-scaler/default/collective_keda_scaledobject.yaml
++ sed -i 's/^  replicas: .*/  replicas: 1/' ug-keda-scaler/default/collective_keda_scaledobject.yaml
+/app/jenkins/workspace/Infra-automation/Development/DevOps_Automation/keda_toggle_test/keda-repo@tmp/durable-7176fbd9/script.sh.copy: line 5: unexpected EOF while looking for matching `''
+[Pipeline] }
+[Pipeline] // dir
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Declarative: Post Actions)
+[Pipeline] cleanWs
+[WS-CLEANUP] Deleting project workspace...
+[WS-CLEANUP] Deferred wipeout is used...
+[WS-CLEANUP] done
+[Pipeline] echo
+❌ KEDA pipeline failed.
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 2
+/app/jenkins/jobs/Infra-automation/jobs/Development/jobs/DevOps_Automation/workspace/keda_toggle_test@tmp/jfrog/60/.jfrog deleted
+Finished: FAILURE
