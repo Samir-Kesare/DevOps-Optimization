@@ -38,7 +38,6 @@ pipeline {
             }
         }
 
-
         stage('Set Kubernetes Master IP') {
             steps {
                 script {
@@ -67,47 +66,44 @@ pipeline {
             }
         }
 
-        stage('Keda toggle') {
+        stage('Keda Toggle') {
             steps {
                 script {
-                    
-                        echo "🔁 Applying KEDA toggle config"
+                    echo "🔁 Applying KEDA toggle config"
 
-                        sh "git clone ${env.GIT_REPO} keda-repo"
+                    sh "git clone ${env.GIT_REPO} keda-repo"
 
-                        dir('keda-repo') {
-                            def kedaFile = "${params.OPCO_NAME}-keda-scaler/${params.namespace}/${params.service}_keda_scaledobject.yaml"
-                            def kedapath = "/app/jenkins/workspace/Infra-automation/Development/DevOps_Automation/keda_toggle_test/keda-repo/${params.OPCO_NAME}-keda-scaler/${params.namespace}"
-                            echo "🔍 Original YAML:"
-                            sh "cat ${kedaFile}"
+                    dir('keda-repo') {
+                        def kedaFile = "${params.OPCO_NAME}-keda-scaler/${params.namespace}/${params.service}_keda_scaledobject.yaml"
+                        def kedapath = "${pwd()}/${kedaFile}"
 
-                            sh """
-                                sed -i 's/minReplicaCount: .*/minReplicaCount: ${params.minReplicaCount}/' ${kedaFile}
-                                sed -i 's/maxReplicaCount: .*/maxReplicaCount: ${params.maxReplicaCount}/' ${kedaFile}
-                                sed -i 's/replicas: .*/replicas: ${params.replica}/' ${kedaFile}
-                                sed -i 's/value: \".*\"/value: \"${params.threshold}\"/' ${kedaFile}
-                            """
+                        echo "🔍 Original YAML:"
+                        sh "cat ${kedaFile}"
 
-                            echo "📝 Updated YAML:"
-                            sh "cat ${kedaFile}"
+                        sh """
+                            sed -i 's/^  minReplicaCount: .*/  minReplicaCount: ${params.minReplicaCount}/' ${kedaFile}
+                            sed -i 's/^  maxReplicaCount: .*/  maxReplicaCount: ${params.maxReplicaCount}/' ${kedaFile}
+                            sed -i 's/^  replicas: .*/  replicas: ${params.replica}/' ${kedaFile}
+                            sed -i '/type: prometheus/,/threshold:/s/threshold: .*/threshold: \\'${params.threshold}\\'/' ${kedaFile}
+                        """
 
-                            sh "scp -P ${env.SSH_PORT} ${kedapath}/${params.service}_keda_scaledobject.yaml ${env.SSH_USER}@${env.k8sserver}:/tmp/${params.service}_keda_scaledobject.yaml"
-                            sh "ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${env.k8sserver} 'kubectl apply -f /tmp/${params.service}_keda_scaledobject.yaml -n ${params.namespace} --dry-run=client'"
+                        echo "📝 Updated YAML:"
+                        sh "cat ${kedaFile}"
 
-                            echo "✅ KEDA config dry-run complete."
+                        sh "scp -P ${env.SSH_PORT} ${kedapath} ${env.SSH_USER}@${env.k8sserver}:/tmp/${params.service}_keda_scaledobject.yaml"
+                        sh "ssh -p ${env.SSH_PORT} ${env.SSH_USER}@${env.k8sserver} 'kubectl apply -f /tmp/${params.service}_keda_scaledobject.yaml -n ${params.namespace} --dry-run=client'"
 
-                            def branch = "feature/${params.OPCO_NAME}-${env.BUILD_ID}"
-                            sh """
-                                git config user.name '${env.CLEAN_USER_ID}'
-                                git config user.email '${env.CLEAN_USER_ID}@airtel.africa'
-                                git checkout -b ${branch}
-                                git add ${kedaFile}
-                                git commit -m "Updated ScaledObject for ${params.service} (${params.OPCO_NAME}) by ${env.CLEAN_USER_ID}"
-                                git push --dry-run origin ${branch}
-                            """
+                        def branch = "feature/${params.OPCO_NAME}-${env.BUILD_ID}"
+                        sh """
+                            git config user.name '${env.CLEAN_USER_ID}'
+                            git config user.email '${env.CLEAN_USER_ID}@airtel.africa'
+                            git checkout -b ${branch}
+                            git add ${kedaFile}
+                            git commit -m "Updated ScaledObject for ${params.service} (${params.OPCO_NAME}) by ${env.CLEAN_USER_ID}"
+                            git push --dry-run origin ${branch}
+                        """
 
-                            echo "✅ Dry-run git push to branch: ${branch}"
-                        }
+                        echo "✅ Dry-run git push to branch: ${branch}"
                     }
                 }
             }
@@ -125,3 +121,4 @@ pipeline {
             echo "❌ KEDA pipeline failed."
         }
     }
+}
