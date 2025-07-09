@@ -1,1 +1,1 @@
-sed -i 's|threshold: \".*\"|threshold: \"${params.threshold}\"|' ${kedaFile}
+sed -i "s|threshold: ['\\\"]\\?.*['\\\"]\\?|threshold: '${params.threshold}'|" ${kedaFile}
